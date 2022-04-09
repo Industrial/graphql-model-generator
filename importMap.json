@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "ajv": "https://esm.sh/ajv@8.11.0",
+    "graphql": "https://esm.sh/graphql@15.3.0",
+    "tiny-invariant": "https://esm.sh/tiny-invariant@1.2.0"
+  }
+}
