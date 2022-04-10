@@ -17,7 +17,6 @@ import {
   GraphQLType,
   printSchema,
 } from 'graphql';
-import invariant from 'tiny-invariant';
 
 import { GraphQLDateTime } from './GraphQLDateTime.ts';
 import { GraphQLPaginateInput } from './GraphQLPaginateInput.ts';
@@ -59,7 +58,10 @@ export class GraphQLGenerator {
 
   getType(type: string) {
     const typeObject = this.scalarTypes[type] || this.objectTypes[type];
-    invariant(typeObject, `Unsupported type: ${type}`);
+
+    if (!typeObject) {
+      throw new Error(`Unsupported type: ${type}`);
+    }
 
     return typeObject;
   }
@@ -178,7 +180,9 @@ export class GraphQLGenerator {
       | GraphQLList<GraphQLType>
       | GraphQLNonNull<GraphQLNullableType> = this.getType(property.type);
 
-    invariant(type, `Unsupported type: ${property.type}`);
+    if (!type) {
+      throw new Error(`Unsupported type: ${property.type}`);
+    }
 
     if (property.list === true) {
       type = new GraphQLList(type);
@@ -229,7 +233,9 @@ export class GraphQLGenerator {
 
   createOperation(model: Model, operation: Operation) {
     const modelObjectType = this.objectTypes[model.name];
-    invariant(modelObjectType, `Model ${model.name} not found`);
+    if (!modelObjectType) {
+      throw new Error(`Model ${model.name} not found`);
+    }
 
     let inputType: GraphQLInputObjectType;
     let outputType: GraphQLObjectType;
