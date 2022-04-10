@@ -9,16 +9,17 @@ import {
   GraphQLNonNull,
   GraphQLNullableType,
   GraphQLObjectType,
-  GraphQLScalarType,
   GraphQLSchema,
   GraphQLType,
   printSchema,
 } from 'graphql';
 
+import { Generator } from './Generator.ts';
 import { GraphQLPaginateInput } from './GraphQLPaginateInput.ts';
 import { GraphQLSortInput } from './GraphQLSortInput.ts';
 import {
   Argument,
+  getLabelForOperationType,
   Model,
   Operation,
   OperationType,
@@ -26,59 +27,13 @@ import {
   Relationship,
 } from './types.ts';
 
-import { scalarTypes as defaultScalarTypes } from './scalarTypes.ts';
-
-export type ObjectTypes = Record<string, GraphQLObjectType>;
-export type ScalarTypes = Record<string, GraphQLScalarType>;
-
-export class GraphQLGenerator {
-  objectTypes: ObjectTypes;
-  scalarTypes: ScalarTypes;
-  models: Array<Model>;
-
-  constructor(
-    objectTypes: ObjectTypes = {},
-    scalarTypes: ScalarTypes = defaultScalarTypes,
-  ) {
-    this.objectTypes = objectTypes;
-    this.scalarTypes = scalarTypes;
-    this.models = [];
-  }
-
-  addModel(model: Model) {
+export class SchemaGenerator extends Generator {
+  override addModel(model: Model) {
     this.models.push(model);
 
     const objectType = this.createObjectType(model);
 
     this.addObjectType(objectType);
-  }
-
-  getType(type: string) {
-    const typeObject = this.scalarTypes[type] || this.objectTypes[type];
-
-    if (!typeObject) {
-      throw new Error(`Unsupported type: ${type}`);
-    }
-
-    return typeObject;
-  }
-
-  addObjectType(type: GraphQLObjectType) {
-    this.objectTypes[type.name] = type;
-  }
-
-  printSchema(schema: GraphQLSchema, filePath: string) {
-    Deno.writeFileSync(
-      filePath,
-      new TextEncoder().encode(printSchema(schema)),
-    );
-  }
-
-  printDocument(documentString: string, filePath: string) {
-    Deno.writeFileSync(
-      filePath,
-      new TextEncoder().encode(documentString),
-    );
   }
 
   createSchema() {
@@ -221,13 +176,6 @@ export class GraphQLGenerator {
     return operations;
   }
 
-  getLabelForOperationType(type: OperationType) {
-    const label = String(OperationType[type]).charAt(0).toUpperCase() +
-      String(OperationType[type]).slice(1);
-
-    return label;
-  }
-
   createOperation(model: Model, operation: Operation) {
     const modelObjectType = this.objectTypes[model.name];
     if (!modelObjectType) {
@@ -237,7 +185,7 @@ export class GraphQLGenerator {
     let inputType: GraphQLInputObjectType;
     let outputType: GraphQLObjectType;
 
-    const operationLabel = this.getLabelForOperationType(operation.type);
+    const operationLabel = getLabelForOperationType(operation.type);
 
     inputType = new GraphQLInputObjectType({
       name: `${model.name}${operationLabel}Input`,
@@ -367,104 +315,10 @@ export class GraphQLGenerator {
     return fields;
   }
 
-  // Because 'graphql-js' doesn't support serializing a Document AST to a string
-  // we need to do it ourselves.
-  createDocument() {
-    const fragments: Array<string> = [];
-    const operations: Array<string> = [];
-
-    for (const model of this.models) {
-      if (!model.operations) {
-        continue;
-      }
-
-      const fragmentName = `${model.name}Fragment`;
-
-      fragments.push(`
-fragment ${fragmentName} on ${model.name} {
-  ${model.properties.map((property) => property.name).join('\n  ')}
-}
-      `);
-
-      for (const operation of model.operations) {
-        const operationLabel = `${model.name}${
-          this.getLabelForOperationType(operation.type)
-        }`;
-        const operationName = `${operation.type}${model.name}`;
-
-        switch (operation.type) {
-          case OperationType.show:
-            operations.push(`
-query ${operationName}($input: ${operationLabel}Input!) {
-  ${operationName}(input: $input) {
-    entry {
-      ...${fragmentName}
-    }
-  }
-}
-            `);
-            break;
-
-          case OperationType.list:
-            operations.push(`
-query ${operationName}($input: ${operationLabel}Input!) {
-  ${operationName}(input: $input) {
-    entries {
-      ...${fragmentName}
-    }
-    total
-  }
-}
-            `);
-            break;
-
-          case OperationType.create:
-            operations.push(`
-mutation ${operationName}($input: ${operationLabel}Input!) {
-  ${operationName}(input: $input) {
-    entry {
-      ...${fragmentName}
-    }
-  }
-}
-            `);
-            break;
-
-          case OperationType.update:
-            operations.push(`
-mutation ${operationName}($input: ${operationLabel}Input!) {
-  ${operationName}(input: $input) {
-    entry {
-      ...${fragmentName}
-    }
-  }
-}
-            `);
-            break;
-
-          case OperationType.remove:
-            operations.push(`
-mutation ${operationName}($input: ${operationLabel}Input!) {
-  ${operationName}(input: $input) {
-    entry {
-      ...${fragmentName}
-    }
-  }
-}
-            `);
-            break;
-
-          default:
-            throw new Error(`Unsupported operation type: ${operation.type}`);
-        }
-      }
-    }
-
-    const document = `
-${fragments.join('\n')}
-${operations.join('\n')}
-    `;
-
-    return document;
+  write(schema: GraphQLSchema, filePath: string) {
+    Deno.writeFileSync(
+      filePath,
+      new TextEncoder().encode(printSchema(schema)),
+    );
   }
 }

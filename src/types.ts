@@ -63,3 +63,10 @@ export enum PermissionType {
   'allow' = 'allow',
   'deny' = 'deny',
 }
+
+export function getLabelForOperationType(type: OperationType) {
+  const label = String(OperationType[type]).charAt(0).toUpperCase() +
+    String(OperationType[type]).slice(1);
+
+  return label;
+}
