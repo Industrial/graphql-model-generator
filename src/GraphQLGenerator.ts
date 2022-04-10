@@ -28,17 +28,21 @@ import {
 
 import { scalarTypes as defaultScalarTypes } from './scalarTypes.ts';
 
+export type ObjectTypes = Record<string, GraphQLObjectType>;
+export type ScalarTypes = Record<string, GraphQLScalarType>;
+
 export class GraphQLGenerator {
+  objectTypes: ObjectTypes;
+  scalarTypes: ScalarTypes;
   models: Array<Model>;
-  objectTypes: Record<string, GraphQLObjectType>;
-  scalarTypes: Record<string, GraphQLScalarType>;
 
   constructor(
-    scalarTypes: Record<string, GraphQLScalarType> = defaultScalarTypes,
+    objectTypes: ObjectTypes = {},
+    scalarTypes: ScalarTypes = defaultScalarTypes,
   ) {
-    this.models = [];
-    this.objectTypes = {};
+    this.objectTypes = objectTypes;
     this.scalarTypes = scalarTypes;
+    this.models = [];
   }
 
   addModel(model: Model) {
