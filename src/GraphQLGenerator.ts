@@ -1,7 +1,5 @@
 import {
-  GraphQLBoolean,
   GraphQLFieldConfigMap,
-  GraphQLFloat,
   GraphQLID,
   GraphQLInputFieldConfigMap,
   GraphQLInputObjectType,
@@ -13,12 +11,10 @@ import {
   GraphQLObjectType,
   GraphQLScalarType,
   GraphQLSchema,
-  GraphQLString,
   GraphQLType,
   printSchema,
 } from 'graphql';
 
-import { GraphQLDateTime } from './GraphQLDateTime.ts';
 import { GraphQLPaginateInput } from './GraphQLPaginateInput.ts';
 import { GraphQLSortInput } from './GraphQLSortInput.ts';
 import {
@@ -30,22 +26,19 @@ import {
   Relationship,
 } from './types.ts';
 
+import { scalarTypes as defaultScalarTypes } from './scalarTypes.ts';
+
 export class GraphQLGenerator {
   models: Array<Model>;
   objectTypes: Record<string, GraphQLObjectType>;
   scalarTypes: Record<string, GraphQLScalarType>;
 
-  constructor() {
+  constructor(
+    scalarTypes: Record<string, GraphQLScalarType> = defaultScalarTypes,
+  ) {
     this.models = [];
     this.objectTypes = {};
-    this.scalarTypes = {
-      Int: GraphQLInt,
-      Float: GraphQLFloat,
-      String: GraphQLString,
-      Boolean: GraphQLBoolean,
-      ID: GraphQLID,
-      DateTime: GraphQLDateTime,
-    };
+    this.scalarTypes = scalarTypes;
   }
 
   addModel(model: Model) {
