@@ -1,3 +1,5 @@
+import { Validator } from './validator.ts';
+
 export type Compound<T> = Array<T> | Record<string, T>;
 
 export type Model = {
@@ -16,14 +18,13 @@ export type Property = {
   permissions?: Array<Permission>;
 };
 
-export enum PropertyType {
-  'Int' = 'Int',
-  'Float' = 'Float',
-  'String' = 'String',
-  'Boolean' = 'Boolean',
-  'ID' = 'ID',
-  'DateTime' = 'DateTime',
-}
+export type PropertyType =
+  | 'Int'
+  | 'Float'
+  | 'String'
+  | 'Boolean'
+  | 'ID'
+  | 'DateTime';
 
 export type Relationship = {
   name: string;
@@ -39,19 +40,14 @@ export type Operation = {
   permissions?: Array<Permission>;
 };
 
-export enum OperationType {
-  'create' = 'create',
-  'show' = 'show',
-  'list' = 'list',
-  'update' = 'update',
-  'remove' = 'remove',
-}
+export type OperationType = 'Create' | 'Show' | 'List' | 'Update' | 'Remove';
 
 export type Argument = {
   name: string;
   type: PropertyType;
   list?: boolean;
   required?: boolean;
+  validators?: Array<Validator>;
 };
 
 export type Permission = {
@@ -59,14 +55,4 @@ export type Permission = {
   type: PermissionType;
 };
 
-export enum PermissionType {
-  'allow' = 'allow',
-  'deny' = 'deny',
-}
-
-export function getLabelForOperationType(type: OperationType) {
-  const label = String(OperationType[type]).charAt(0).toUpperCase() +
-    String(OperationType[type]).slice(1);
-
-  return label;
-}
+export type PermissionType = 'Allow' | 'Deny';

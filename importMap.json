@@ -1,6 +1,11 @@
 {
   "imports": {
     "ajv": "https://esm.sh/ajv@8.11.0",
-    "graphql": "https://esm.sh/graphql@15.3.0"
+    "change-case": "https://esm.sh/change-case@4.1.2",
+    "graphql": "https://esm.sh/graphql@15.3.0",
+    "ts-morph": "https://esm.sh/ts-morph@14.0.0",
+    "typescript": "https://esm.sh/typescript@4.6.3",
+
+    "/": "./"
   }
 }

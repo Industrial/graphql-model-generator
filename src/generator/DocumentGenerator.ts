@@ -1,10 +1,11 @@
-import { Generator } from './Generator.ts';
-import { getLabelForOperationType, OperationType } from './types.ts';
+import { GraphQLGenerator } from './GraphQLGenerator.ts';
 
-export class DocumentGenerator extends Generator {
+export class DocumentGenerator extends GraphQLGenerator {
+  document?: string;
+
   // Because 'graphql-js' doesn't support serializing a Document AST to a string
   // we need to do it ourselves.
-  createDocument() {
+  create() {
     const fragments: Array<string> = [];
     const operations: Array<string> = [];
 
@@ -22,13 +23,11 @@ fragment ${fragmentName} on ${model.name} {
       `);
 
       for (const operation of model.operations) {
-        const operationLabel = `${model.name}${
-          getLabelForOperationType(operation.type)
-        }`;
-        const operationName = `${operation.type}${model.name}`;
+        const operationLabel = `${model.name}${operation.type}`;
+        const operationName = `${operation.name}${model.name}`;
 
         switch (operation.type) {
-          case OperationType.show:
+          case 'Show':
             operations.push(`
 query ${operationName}($input: ${operationLabel}Input!) {
   ${operationName}(input: $input) {
@@ -40,7 +39,7 @@ query ${operationName}($input: ${operationLabel}Input!) {
             `);
             break;
 
-          case OperationType.list:
+          case 'List':
             operations.push(`
 query ${operationName}($input: ${operationLabel}Input!) {
   ${operationName}(input: $input) {
@@ -53,7 +52,7 @@ query ${operationName}($input: ${operationLabel}Input!) {
             `);
             break;
 
-          case OperationType.create:
+          case 'Create':
             operations.push(`
 mutation ${operationName}($input: ${operationLabel}Input!) {
   ${operationName}(input: $input) {
@@ -65,7 +64,7 @@ mutation ${operationName}($input: ${operationLabel}Input!) {
             `);
             break;
 
-          case OperationType.update:
+          case 'Update':
             operations.push(`
 mutation ${operationName}($input: ${operationLabel}Input!) {
   ${operationName}(input: $input) {
@@ -77,7 +76,7 @@ mutation ${operationName}($input: ${operationLabel}Input!) {
             `);
             break;
 
-          case OperationType.remove:
+          case 'Remove':
             operations.push(`
 mutation ${operationName}($input: ${operationLabel}Input!) {
   ${operationName}(input: $input) {
@@ -100,13 +99,7 @@ ${fragments.join('\n')}
 ${operations.join('\n')}
     `;
 
-    return document;
-  }
-
-  write(documentString: string, filePath: string) {
-    Deno.writeFileSync(
-      filePath,
-      new TextEncoder().encode(documentString),
-    );
+    this.document = document;
+    this.output = document;
   }
 }

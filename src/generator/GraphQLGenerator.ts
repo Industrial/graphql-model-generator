@@ -1,27 +1,21 @@
 import { GraphQLObjectType, GraphQLScalarType } from 'graphql';
 
-import { Model } from './types.ts';
-import { scalarTypes as defaultScalarTypes } from './scalarTypes.ts';
+import { Generator } from './Generator.ts';
+import { scalarTypes as defaultScalarTypes } from '../scalarTypes.ts';
 
-export type ObjectTypes = Record<string, GraphQLObjectType>;
-export type ScalarTypes = Record<string, GraphQLScalarType>;
-
-export class Generator {
-  objectTypes: ObjectTypes;
-  scalarTypes: ScalarTypes;
-  models: Array<Model>;
+export abstract class GraphQLGenerator extends Generator {
+  objectTypes: Record<string, GraphQLObjectType>;
+  scalarTypes: Record<string, GraphQLScalarType>;
 
   constructor(
-    objectTypes: ObjectTypes = {},
-    scalarTypes: ScalarTypes = defaultScalarTypes,
+    outputDirectoryPath: string,
+    objectTypes: Record<string, GraphQLObjectType> = {},
+    scalarTypes: Record<string, GraphQLScalarType> = defaultScalarTypes,
   ) {
+    super(outputDirectoryPath);
+
     this.objectTypes = objectTypes;
     this.scalarTypes = scalarTypes;
-    this.models = [];
-  }
-
-  addModel(model: Model) {
-    this.models.push(model);
   }
 
   addObjectType(type: GraphQLObjectType) {

@@ -14,20 +14,21 @@ import {
   printSchema,
 } from 'graphql';
 
-import { Generator } from './Generator.ts';
-import { GraphQLPaginateInput } from './GraphQLPaginateInput.ts';
-import { GraphQLSortInput } from './GraphQLSortInput.ts';
+import { GraphQLGenerator } from './GraphQLGenerator.ts';
+import { GraphQLPaginateInput } from '../GraphQLPaginateInput.ts';
+import { GraphQLSortInput } from '../GraphQLSortInput.ts';
 import {
   Argument,
-  getLabelForOperationType,
   Model,
   Operation,
   OperationType,
   Property,
   Relationship,
-} from './types.ts';
+} from '../types.ts';
 
-export class SchemaGenerator extends Generator {
+export class SchemaGenerator extends GraphQLGenerator {
+  schema?: GraphQLSchema;
+
   override addModel(model: Model) {
     this.models.push(model);
 
@@ -36,27 +37,14 @@ export class SchemaGenerator extends Generator {
     this.addObjectType(objectType);
   }
 
-  createSchema() {
-    const query = this.createQuery();
-    const mutation = this.createMutation();
-
-    const schema = new GraphQLSchema({
-      query,
-      mutation,
-      types: Object.values(this.objectTypes),
-    });
-
-    return schema;
-  }
-
   createQuery() {
     const query = new GraphQLObjectType({
       name: 'Query',
       fields: () => {
         return this.createOperations(
           [
-            OperationType.show,
-            OperationType.list,
+            'Show',
+            'List',
           ],
         );
       },
@@ -71,9 +59,9 @@ export class SchemaGenerator extends Generator {
       fields: () => {
         return this.createOperations(
           [
-            OperationType.create,
-            OperationType.update,
-            OperationType.remove,
+            'Create',
+            'Update',
+            'Remove',
           ],
         );
       },
@@ -119,11 +107,39 @@ export class SchemaGenerator extends Generator {
 
     if (model.relationships) {
       for (const relationship of model.relationships) {
-        relationships[relationship.name] = this.createProperty(relationship);
+        relationships[relationship.name] = this.createRelationship(
+          relationship,
+        );
       }
     }
 
     return relationships;
+  }
+
+  createRelationship(relationship: Relationship) {
+    let type:
+      | ReturnType<typeof this.getType>
+      | GraphQLList<GraphQLType>
+      | GraphQLNonNull<GraphQLNullableType> = this.getType(relationship.type);
+
+    if (!type) {
+      throw new Error(`Unsupported type: ${relationship.type}`);
+    }
+
+    if (relationship.list === true) {
+      type = new GraphQLList(type);
+    }
+
+    if (
+      typeof relationship.required === 'undefined' ||
+      relationship.required === true
+    ) {
+      type = new GraphQLNonNull(type);
+    }
+
+    return {
+      type,
+    };
   }
 
   createProperty(property: Property | Relationship | Argument) {
@@ -146,6 +162,9 @@ export class SchemaGenerator extends Generator {
     ) {
       type = new GraphQLNonNull(type);
     }
+
+    // TODO: Handle the unique property.
+    // TODO: Handle the permissions property.
 
     return {
       type,
@@ -185,10 +204,8 @@ export class SchemaGenerator extends Generator {
     let inputType: GraphQLInputObjectType;
     let outputType: GraphQLObjectType;
 
-    const operationLabel = getLabelForOperationType(operation.type);
-
     inputType = new GraphQLInputObjectType({
-      name: `${model.name}${operationLabel}Input`,
+      name: `${model.name}${operation.type}Input`,
       fields: () => {
         const inputFields = this.createOperationInputFields(operation);
 
@@ -211,7 +228,7 @@ export class SchemaGenerator extends Generator {
 
     // Generic output type used for most operations.
     outputType = new GraphQLObjectType({
-      name: `${model.name}${operationLabel}Result`,
+      name: `${model.name}${operation.type}Result`,
       fields: () => {
         return {
           entry: {
@@ -222,13 +239,13 @@ export class SchemaGenerator extends Generator {
     });
 
     switch (operation.type) {
-      case OperationType.show:
+      case 'Show':
         // Use the generic types.
         break;
 
-      case OperationType.list:
+      case 'List':
         inputType = new GraphQLInputObjectType({
-          name: `${model.name}${operationLabel}Input`,
+          name: `${model.name}${operation.type}Input`,
           fields: () => {
             return {
               ...this.createOperationInputFields(operation),
@@ -242,7 +259,7 @@ export class SchemaGenerator extends Generator {
           },
         });
         outputType = new GraphQLObjectType({
-          name: `${model.name}${operationLabel}Result`,
+          name: `${model.name}${operation.type}Result`,
           fields: () => {
             return {
               entries: {
@@ -256,9 +273,9 @@ export class SchemaGenerator extends Generator {
         });
         break;
 
-      case OperationType.create:
+      case 'Create':
         inputType = new GraphQLInputObjectType({
-          name: `${model.name}${operationLabel}Input`,
+          name: `${model.name}${operation.type}Input`,
           fields: () => {
             return {
               ...this.createOperationInputFields(operation),
@@ -267,9 +284,9 @@ export class SchemaGenerator extends Generator {
         });
         break;
 
-      case OperationType.update:
+      case 'Update':
         inputType = new GraphQLInputObjectType({
-          name: `${model.name}${operationLabel}Input`,
+          name: `${model.name}${operation.type}Input`,
           fields: () => {
             return {
               id: {
@@ -281,7 +298,7 @@ export class SchemaGenerator extends Generator {
         });
         break;
 
-      case OperationType.remove:
+      case 'Remove':
         // Use the generic types.
         break;
 
@@ -306,7 +323,7 @@ export class SchemaGenerator extends Generator {
 
     if (operation.arguments) {
       for (const argument of operation.arguments) {
-        fields[argument.name] = this.createProperty(argument) as {
+        fields[argument.name] = this.createArgument(argument) as {
           type: GraphQLInputType;
         };
       }
@@ -315,10 +332,45 @@ export class SchemaGenerator extends Generator {
     return fields;
   }
 
-  write(schema: GraphQLSchema, filePath: string) {
-    Deno.writeFileSync(
-      filePath,
-      new TextEncoder().encode(printSchema(schema)),
-    );
+  createArgument(argument: Argument) {
+    let type:
+      | ReturnType<typeof this.getType>
+      | GraphQLList<GraphQLType>
+      | GraphQLNonNull<GraphQLNullableType> = this.getType(argument.type);
+
+    if (!type) {
+      throw new Error(`Unsupported type: ${argument.type}`);
+    }
+
+    if (argument.list === true) {
+      type = new GraphQLList(type);
+    }
+
+    if (
+      typeof argument.required === 'undefined' ||
+      argument.required === true
+    ) {
+      type = new GraphQLNonNull(type);
+    }
+
+    // TODO: Handle the validators property.
+
+    return {
+      type,
+    };
+  }
+
+  create() {
+    const query = this.createQuery();
+    const mutation = this.createMutation();
+
+    const schema = new GraphQLSchema({
+      query,
+      mutation,
+      types: Object.values(this.objectTypes),
+    });
+
+    this.schema = schema;
+    this.output = printSchema(schema);
   }
 }
