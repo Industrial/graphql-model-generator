@@ -7,27 +7,19 @@ import { signatures } from '../validator.ts';
 export class ResolverGenerator extends TypeScriptGenerator {
   serviceDirectoryPath: string;
 
-  imports: Array<string>;
+  imports: string;
 
   constructor(outputDirectoryPath: string, serviceDirectoryPath: string) {
     super(outputDirectoryPath);
 
     this.serviceDirectoryPath = serviceDirectoryPath;
-    this.imports = [];
+    this.imports = ``;
   }
 
   override addModel(model: Model) {
     this.models.push(model);
 
     this.createClass(model);
-  }
-
-  addImport(importString: string) {
-    this.imports.push(importString);
-  }
-
-  addOutput(output: string) {
-    this.output = `${this.output}${output}`;
   }
 
   getModelServiceName(model: Model) {
@@ -52,6 +44,10 @@ export class ResolverGenerator extends TypeScriptGenerator {
 
   getOperationName(operation: Operation) {
     return camelCase(`${operation.type}-${operation.name}`);
+  }
+
+  stripMultipleNewlines(str: string) {
+    return str.replace(/\n\s*\n/g, '\n');
   }
 
   createShowOperation(
@@ -131,25 +127,17 @@ async ${operationName}(
 
   createOperations(model: Model) {
     if (!model.operations) {
-      return '';
+      return;
     }
 
     const servicePropertyName = this.getModelServicePropertyName(model);
-
-    const operations = {
-      Show: this.createShowOperation,
-      List: this.createListOperation,
-      Create: this.createCreateOperation,
-      Update: this.createUpdateOperation,
-      Remove: this.createRemoveOperation,
-    };
 
     return model.operations.map((operation) => {
       const inputName = this.getOperationInputName(model, operation);
       const outputName = this.getOperationOutputName(model, operation);
       const operationName = this.getOperationName(operation);
 
-      return operations[operation.type](
+      return this[`create${operation.type}Operation`](
         inputName,
         outputName,
         operationName,
@@ -160,12 +148,12 @@ async ${operationName}(
 
   createOperationValidators(model: Model) {
     if (!model.operations) {
-      return '';
+      return;
     }
 
     return model.operations.map((operation) => {
       if (!operation.arguments) {
-        return '';
+        return;
       }
 
       const inputName = this.getOperationInputName(model, operation);
@@ -188,7 +176,7 @@ async ${operationName}(
 
   createOperationsImports(model: Model) {
     if (!model.operations) {
-      return '';
+      return;
     }
 
     return model.operations.map((operation) => {
@@ -206,12 +194,9 @@ import { ${outputName} } from '${this.outputDirectoryPath}/server.ts';`;
     const serviceName = this.getModelServiceName(model);
     const servicePropertyName = this.getModelServicePropertyName(model);
 
-    this.addImport(
-      `import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';`,
-    );
-    this.addImport(
-      `import { ${model.name} } from '${this.outputDirectoryPath}/server.ts';`,
-    );
+    this.imports += `
+import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';
+import { ${model.name} } from '${this.outputDirectoryPath}/server.ts';\n`;
 
     let output = ``;
     const operationsOutput = this.createOperations(model);
@@ -234,23 +219,25 @@ ${classOutput}
 ${output}
     `;
 
-    this.addImport(operationsImportsOutput);
-    this.addOutput(output);
+    this.imports += operationsImportsOutput;
+    this.output += output;
   }
 
   createImports(model: Model) {
     const serviceName = this.getModelServiceName(model);
-    this.addImport(`
+    this.imports += `
 import { ${model.name} } from '${this.outputDirectoryPath}/server.ts';
-import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';`);
+import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';`;
   }
 
   create() {
-    this.output = TypeScriptGenerator.formatTypeScript(`
+    this.output = TypeScriptGenerator.formatTypeScript(
+      this.stripMultipleNewlines(`
 import ClassValidator from 'class-validator';
 import { Arg, Mutation, Query, Resolver } from 'type-graphql';
 import { Service } from 'typedi';
-${this.imports.join('\n')}
-${this.output}`);
+${this.imports}
+${this.output}`),
+    );
   }
 }
