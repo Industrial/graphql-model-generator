@@ -1,4 +1,4 @@
-import { Validator } from './validator.ts';
+import { Validators } from './validator.ts';
 
 export type Compound<T> = Array<T> | Record<string, T>;
 
@@ -14,7 +14,9 @@ export type Property = {
   type: PropertyType;
   list?: boolean;
   required?: boolean;
+  // TODO: Implement this.
   unique?: boolean;
+  // TODO: Implement this.
   permissions?: Array<Permission>;
 };
 
@@ -47,7 +49,8 @@ export type Argument = {
   type: PropertyType;
   list?: boolean;
   required?: boolean;
-  validators?: Array<Validator>;
+  // TODO: Implement this.
+  validators?: Array<Validators>;
 };
 
 export type Permission = {
