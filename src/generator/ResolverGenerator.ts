@@ -7,13 +7,13 @@ import { signatures } from '../validator.ts';
 export class ResolverGenerator extends TypeScriptGenerator {
   serviceDirectoryPath: string;
 
-  imports: string;
+  imports: Array<string>;
 
   constructor(outputDirectoryPath: string, serviceDirectoryPath: string) {
     super(outputDirectoryPath);
 
     this.serviceDirectoryPath = serviceDirectoryPath;
-    this.imports = '';
+    this.imports = [];
   }
 
   override addModel(model: Model) {
@@ -23,15 +23,35 @@ export class ResolverGenerator extends TypeScriptGenerator {
   }
 
   addImport(importString: string) {
-    this.imports = TypeScriptGenerator.formatTypeScript(
-      `${this.imports}${importString}`,
-    );
+    this.imports.push(importString);
   }
 
   addOutput(output: string) {
-    this.output = TypeScriptGenerator.formatTypeScript(
-      `${this.output}${output}`,
-    );
+    this.output = `${this.output}${output}`;
+  }
+
+  getModelServiceName(model: Model) {
+    return pascalCase(`${model.name}Service`);
+  }
+
+  getModelResolverName(model: Model) {
+    return pascalCase(`${model.name}Resolver`);
+  }
+
+  getModelServicePropertyName(model: Model) {
+    return camelCase(this.getModelServiceName(model));
+  }
+
+  getOperationInputName(model: Model, operation: Operation) {
+    return pascalCase(`${model.name}-${operation.type}-Input`);
+  }
+
+  getOperationOutputName(model: Model, operation: Operation) {
+    return pascalCase(`${model.name}-${operation.type}-Result`);
+  }
+
+  getOperationName(operation: Operation) {
+    return camelCase(`${operation.type}-${operation.name}`);
   }
 
   createShowOperation(
@@ -109,80 +129,94 @@ async ${operationName}(
 }`;
   }
 
-  createOperationValidators(operation: Operation, inputName: string) {
-    if (!operation.arguments) {
+  createOperations(model: Model) {
+    if (!model.operations) {
       return '';
     }
 
-    return operation.arguments?.map((argument) =>
-      argument.validators?.map((validator) => {
-        const signature = signatures[validator.type];
-        if (!signature) {
-          throw new Error(`Unknown validator type: ${validator.type}`);
-        }
-        return signature(
-          inputName,
-          argument.name,
-          validator,
-        );
-      }).join('\n')
-    ).join('\n');
+    const servicePropertyName = this.getModelServicePropertyName(model);
+
+    const operations = {
+      Show: this.createShowOperation,
+      List: this.createListOperation,
+      Create: this.createCreateOperation,
+      Update: this.createUpdateOperation,
+      Remove: this.createRemoveOperation,
+    };
+
+    return model.operations.map((operation) => {
+      const inputName = this.getOperationInputName(model, operation);
+      const outputName = this.getOperationOutputName(model, operation);
+      const operationName = this.getOperationName(operation);
+
+      return operations[operation.type](
+        inputName,
+        outputName,
+        operationName,
+        servicePropertyName,
+      );
+    }).join('\n');
+  }
+
+  createOperationValidators(model: Model) {
+    if (!model.operations) {
+      return '';
+    }
+
+    return model.operations.map((operation) => {
+      if (!operation.arguments) {
+        return '';
+      }
+
+      const inputName = this.getOperationInputName(model, operation);
+
+      return operation.arguments?.map((argument) =>
+        argument.validators?.map((validator) => {
+          const signature = signatures[validator.type];
+          if (!signature) {
+            throw new Error(`Unknown validator type: ${validator.type}`);
+          }
+          return signature(
+            inputName,
+            argument.name,
+            validator,
+          );
+        }).join('\n')
+      ).join('\n');
+    }).join('\n');
+  }
+
+  createOperationsImports(model: Model) {
+    if (!model.operations) {
+      return '';
+    }
+
+    return model.operations.map((operation) => {
+      const inputName = this.getOperationInputName(model, operation);
+      const outputName = this.getOperationOutputName(model, operation);
+
+      return `
+import { ${inputName} } from '${this.outputDirectoryPath}/server.ts';
+import { ${outputName} } from '${this.outputDirectoryPath}/server.ts';`;
+    }).join('\n');
   }
 
   createClass(model: Model) {
-    const resolverName = pascalCase(`${model.name}Resolver`);
-    const serviceName = pascalCase(`${model.name}Service`);
-    const servicePropertyName = camelCase(serviceName);
+    const resolverName = this.getModelResolverName(model);
+    const serviceName = this.getModelServiceName(model);
+    const servicePropertyName = this.getModelServicePropertyName(model);
 
-    const serviceImport =
-      `import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';`;
-    this.addImport(serviceImport);
-
-    const modelImport =
-      `import { ${model.name} } from '${this.outputDirectoryPath}/server.ts';`;
-    this.addImport(modelImport);
+    this.addImport(
+      `import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';`,
+    );
+    this.addImport(
+      `import { ${model.name} } from '${this.outputDirectoryPath}/server.ts';`,
+    );
 
     let output = ``;
-    let importsOutput = ``;
-    let operationsOutput = ``;
-    const validatorsOutput: Array<string> = [];
-
-    if (model.operations && model.operations.length > 0) {
-      for (const operation of model.operations) {
-        const inputName = pascalCase(`${model.name}-${operation.type}-Input`);
-        const outputName = pascalCase(`${model.name}-${operation.type}-Result`);
-        const operationName = camelCase(`${operation.type}-${operation.name}`);
-
-        validatorsOutput.push(this.createOperationValidators(
-          operation,
-          inputName,
-        ));
-
-        importsOutput += `
-import { ${inputName} } from '${this.outputDirectoryPath}/server.ts';
-import { ${outputName} } from '${this.outputDirectoryPath}/server.ts';`;
-
-        const operations = {
-          Show: this.createShowOperation,
-          List: this.createListOperation,
-          Create: this.createCreateOperation,
-          Update: this.createUpdateOperation,
-          Remove: this.createRemoveOperation,
-        };
-        const operationOutput = operations[operation.type];
-
-        if (!operationOutput) {
-          throw new Error(`Unknown operation type: ${operation.type}`);
-        }
-
-        operationsOutput += operationOutput(
-          inputName,
-          outputName,
-          operationName,
-          servicePropertyName,
-        );
-      }
-    }
+    const operationsOutput = this.createOperations(model);
+    const operationValidatorsOutput = this.createOperationValidators(model);
+    const operationsImportsOutput = this.createOperationsImports(model);
 
     const classOutput = `
 @Service()
@@ -195,33 +229,28 @@ ${operationsOutput}
 }`;
 
     output = `
-${validatorsOutput.join('\n')}
+${operationValidatorsOutput}
 ${classOutput}
 ${output}
     `;
 
-    this.addImport(importsOutput);
+    this.addImport(operationsImportsOutput);
     this.addOutput(output);
   }
 
   createImports(model: Model) {
-    const serviceName = pascalCase(`${model.name}Service`);
-
+    const serviceName = this.getModelServiceName(model);
     this.addImport(`
 import { ${model.name} } from '${this.outputDirectoryPath}/server.ts';
-import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';
-    `);
+import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';`);
   }
 
   create() {
-    this.output = TypeScriptGenerator.formatTypeScript(
-      `
+    this.output = TypeScriptGenerator.formatTypeScript(`
 import ClassValidator from 'class-validator';
 import { Arg, Mutation, Query, Resolver } from 'type-graphql';
 import { Service } from 'typedi';
-${this.imports}
-${this.output}
-      `,
-    );
+${this.imports.join('\n')}
+${this.output}`);
   }
 }
