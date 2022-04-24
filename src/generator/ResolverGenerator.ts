@@ -1,6 +1,6 @@
 import { camelCase, pascalCase } from 'change-case';
 
-import { Model } from '../types.ts';
+import { Model, Operation } from '../types.ts';
 import { TypeScriptGenerator } from './TypeScriptGenerator.ts';
 import { signatures } from '../validator.ts';
 
@@ -109,6 +109,26 @@ async ${operationName}(
 }`;
   }
 
+  createOperationValidators(operation: Operation, inputName: string) {
+    if (!operation.arguments) {
+      return '';
+    }
+
+    return operation.arguments?.map((argument) =>
+      argument.validators?.map((validator) => {
+        const signature = signatures[validator.type];
+        if (!signature) {
+          throw new Error(`Unknown validator type: ${validator.type}`);
+        }
+        return signature(
+          inputName,
+          argument.name,
+          validator,
+        );
+      }).join('\n')
+    ).join('\n');
+  }
+
   createClass(model: Model) {
     const resolverName = pascalCase(`${model.name}Resolver`);
     const serviceName = pascalCase(`${model.name}Service`);
@@ -116,16 +136,16 @@ async ${operationName}(
 
     const serviceImport =
       `import { ${serviceName} } from '${this.serviceDirectoryPath}/${serviceName}.ts';`;
-    this.addImport(TypeScriptGenerator.formatTypeScript(serviceImport));
+    this.addImport(serviceImport);
 
     const modelImport =
       `import { ${model.name} } from '${this.outputDirectoryPath}/server.ts';`;
-    this.addImport(TypeScriptGenerator.formatTypeScript(modelImport));
+    this.addImport(modelImport);
 
     let output = ``;
     let importsOutput = ``;
     let operationsOutput = ``;
-    let validatorsOutput = ``;
+    const validatorsOutput: Array<string> = [];
 
     if (model.operations && model.operations.length > 0) {
       for (const operation of model.operations) {
@@ -133,80 +153,34 @@ async ${operationName}(
         const outputName = pascalCase(`${model.name}-${operation.type}-Result`);
         const operationName = camelCase(`${operation.type}-${operation.name}`);
 
-        if (operation.arguments && operation.arguments.length > 0) {
-          for (const argument of operation.arguments) {
-            if (argument.validators && argument.validators.length > 0) {
-              for (const validator of argument.validators) {
-                const signature = signatures[validator.type];
-
-                if (!signature) {
-                  throw new Error(`Unknown validator type: ${validator.type}`);
-                }
-
-                const signatureOutput = signature(
-                  inputName,
-                  argument.name,
-                  validator,
-                );
-
-                validatorsOutput = `
-${validatorsOutput}
-${signatureOutput}`;
-              }
-            }
-          }
-        }
+        validatorsOutput.push(this.createOperationValidators(
+          operation,
+          inputName,
+        ));
 
         importsOutput += `
 import { ${inputName} } from '${this.outputDirectoryPath}/server.ts';
 import { ${outputName} } from '${this.outputDirectoryPath}/server.ts';`;
 
-        switch (operation.type) {
-          case 'Show':
-            operationsOutput += this.createShowOperation(
-              inputName,
-              outputName,
-              operationName,
-              servicePropertyName,
-            );
-            break;
+        const operations = {
+          Show: this.createShowOperation,
+          List: this.createListOperation,
+          Create: this.createCreateOperation,
+          Update: this.createUpdateOperation,
+          Remove: this.createRemoveOperation,
+        };
+        const operationOutput = operations[operation.type];
 
-          case 'List':
-            operationsOutput += this.createListOperation(
-              inputName,
-              outputName,
-              operationName,
-              servicePropertyName,
-            );
-            break;
-
-          case 'Create':
-            operationsOutput += this.createCreateOperation(
-              inputName,
-              outputName,
-              operationName,
-              servicePropertyName,
-            );
-            break;
-
-          case 'Update':
-            operationsOutput += this.createUpdateOperation(
-              inputName,
-              outputName,
-              operationName,
-              servicePropertyName,
-            );
-            break;
-
-          case 'Remove':
-            operationsOutput += this.createRemoveOperation(
-              inputName,
-              outputName,
-              operationName,
-              servicePropertyName,
-            );
-            break;
+        if (!operationOutput) {
+          throw new Error(`Unknown operation type: ${operation.type}`);
         }
+
+        operationsOutput += operationOutput(
+          inputName,
+          outputName,
+          operationName,
+          servicePropertyName,
+        );
       }
     }
 
@@ -221,7 +195,7 @@ ${operationsOutput}
 }`;
 
     output = `
-${validatorsOutput}
+${validatorsOutput.join('\n')}
 ${classOutput}
 ${output}
     `;
